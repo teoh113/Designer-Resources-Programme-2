@@ -30,11 +30,14 @@ function makeId() {
 }
 
 export default function ItemEditor({ mode, initial, onCancel, onSubmit, onDelete }: Props) {
-  const barTypes = useProgrammeStore(s => s.barTypes)
-  const statuses = useProgrammeStore(s => s.statuses)
-  const srpOptions = useProgrammeStore(s => s.srpOptions)
-  const worksManagerOptions = useProgrammeStore(s => s.worksManagerOptions)
-  const designerOptions = useProgrammeStore(s => s.designerOptions)
+  const tabs = useProgrammeStore(s => s.tabs)
+  const activeTabId = useProgrammeStore(s => s.activeTabId)
+  const activeTab = useMemo(() => tabs.find(t => t.id === activeTabId) ?? tabs[0] ?? null, [activeTabId, tabs])
+  const barTypes = activeTab?.barTypes ?? []
+  const statuses = activeTab?.statuses ?? []
+  const srpOptions = activeTab?.srpOptions ?? []
+  const worksManagerOptions = activeTab?.worksManagerOptions ?? []
+  const designerOptions = activeTab?.designerOptions ?? []
 
   const defaultBarTypeId = barTypes[0]?.id ?? "design"
   const defaultStatusId = statuses[0]?.id ?? "active"

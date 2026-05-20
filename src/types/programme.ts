@@ -18,6 +18,20 @@ export type ScheduleSegment = {
   endDate: string
 }
 
+export type ProgressPoint = {
+  itemId: string
+  date: string
+  yRatio: number
+}
+
+export type ProgressLine = {
+  id: string
+  name: string
+  color: string
+  weightPx: number
+  points: ProgressPoint[]
+}
+
 export type ProgrammeItem = {
   id: string
   t1No: string
@@ -36,3 +50,15 @@ export type ProgrammeItemInput = Omit<ProgrammeItem, "id" | "createdAt" | "updat
 export type SortKey = "t1No" | "items" | "srp" | "worksManager" | "designer"
 
 export type SortDirection = "asc" | "desc"
+
+export type ProgrammeTab = {
+  id: string
+  name: string
+  items: ProgrammeItem[]
+  barTypes: BarType[]
+  statuses: StatusType[]
+  srpOptions: string[]
+  worksManagerOptions: string[]
+  designerOptions: string[]
+  progressLines: ProgressLine[]
+}

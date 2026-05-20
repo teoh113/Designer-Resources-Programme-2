@@ -11,6 +11,7 @@ type Props = {
   pxPerDay: number
   heightPx?: number
   onCommit?: (segments: ScheduleSegment[]) => void
+  onRequestRangeStart?: (nextRangeStart: number) => void
 }
 
 type Placed = {
@@ -120,7 +121,7 @@ type DragState = {
   startDayEnd: number
 }
 
-export default function ScheduleLane({ segments, barTypes, rangeStart, rangeEnd, pxPerDay, heightPx, onCommit }: Props) {
+export default function ScheduleLane({ segments, barTypes, rangeStart, rangeEnd, pxPerDay, heightPx, onCommit, onRequestRangeStart }: Props) {
   const widthPx = computeScheduleWidthPx(rangeStart, rangeEnd, pxPerDay)
   const [draft, setDraft] = useState<ScheduleSegment[]>(segments)
   const draftRef = useRef<ScheduleSegment[]>(segments)
@@ -128,6 +129,7 @@ export default function ScheduleLane({ segments, barTypes, rangeStart, rangeEnd,
   const movedRef = useRef(false)
   const suppressClickUntilRef = useRef(0)
   const dragRef = useRef<DragState | null>(null)
+  const prevRangeStartRef = useRef(rangeStart)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const measureCanvasRef = useRef<HTMLCanvasElement | null>(null)
 
@@ -135,6 +137,17 @@ export default function ScheduleLane({ segments, barTypes, rangeStart, rangeEnd,
     if (draggingRef.current) return
     setDraft(segments)
   }, [segments])
+
+  useEffect(() => {
+    const prev = prevRangeStartRef.current
+    if (prev === rangeStart) return
+    const shiftDays = Math.round((prev - rangeStart) / 86400000)
+    if (shiftDays !== 0 && draggingRef.current && dragRef.current) {
+      dragRef.current.startDayStart += shiftDays
+      dragRef.current.startDayEnd += shiftDays
+    }
+    prevRangeStartRef.current = rangeStart
+  }, [rangeStart])
 
   useEffect(() => {
     draftRef.current = draft
@@ -231,6 +244,7 @@ export default function ScheduleLane({ segments, barTypes, rangeStart, rangeEnd,
     if (!state) return
     const deltaDays = Math.round((clientX - state.startX) / pxPerDay)
     if (deltaDays !== 0) movedRef.current = true
+    const padDays = 7
     const next = draftRef.current.map(seg => {
       if (seg.id !== state.id) return seg
       const baseStart = state.startDayStart
@@ -242,11 +256,13 @@ export default function ScheduleLane({ segments, barTypes, rangeStart, rangeEnd,
         const nextEndUnclamped = nextStartUnclamped + len
         const nextEnd = nextEndUnclamped > maxDay ? maxDay : nextEndUnclamped
         const nextStart = nextEndUnclamped > maxDay ? nextEnd - len : nextStartUnclamped
+        if (nextStart < padDays) onRequestRangeStart?.(rangeStart - (padDays - nextStart) * 86400000)
         return { ...seg, startDate: isoFromDayIndex(rangeStart, nextStart), endDate: isoFromDayIndex(rangeStart, nextEnd) }
       }
 
       if (state.mode === "start") {
         const nextStart = Math.min(baseStart + deltaDays, baseEnd)
+        if (nextStart < padDays) onRequestRangeStart?.(rangeStart - (padDays - nextStart) * 86400000)
         return { ...seg, startDate: isoFromDayIndex(rangeStart, nextStart) }
       }
 

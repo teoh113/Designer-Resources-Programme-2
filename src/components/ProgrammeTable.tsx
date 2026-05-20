@@ -32,6 +32,7 @@ type Props = {
   selectedId: string | null
   rangeStart: number
   rangeEnd: number
+  onRequestRangeStart?: (nextRangeStart: number) => void
   sort: SortState
   filters: FilterState
   resetToken: number
@@ -87,6 +88,7 @@ export default function ProgrammeTable({
   selectedId,
   rangeStart,
   rangeEnd,
+  onRequestRangeStart,
   sort,
   filters,
   resetToken,
@@ -1714,6 +1716,7 @@ export default function ProgrammeTable({
                         paddingBottom: schedulePadY,
                       }
                       const visibleSegments = item.segments.filter(seg => !hiddenBarTypeIds.includes(seg.barTypeId))
+                      const hiddenSegments = item.segments.filter(seg => hiddenBarTypeIds.includes(seg.barTypeId))
                       return (
                         <td key={col.key} className={baseClass} style={scheduleStyle}>
                           <div
@@ -1735,8 +1738,9 @@ export default function ProgrammeTable({
                                 rangeEnd={rangeEnd}
                                 pxPerDay={pxPerDay}
                                 heightPx={scheduleLaneHeightPx}
+                                onRequestRangeStart={onRequestRangeStart}
                                 onCommit={next => {
-                                  const result = onUpdateItem(item.id, { segments: next })
+                                  const result = onUpdateItem(item.id, { segments: [...next, ...hiddenSegments] })
                                   if (result.ok === false) setTableError(result.error)
                                 }}
                               />

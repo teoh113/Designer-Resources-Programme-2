@@ -208,6 +208,19 @@ export default function Home() {
     }
   }, [activeTabId, items, rangeOverride, rangeStorageKey, updateItem])
 
+  const requestRangeStart = useMemo(() => {
+    return (nextRangeStart: number) => {
+      setRangeOverrideByTab(prev => {
+        const current = prev[activeTabId] ?? { start: "", end: "2029-05-29" }
+        const currentStart = current.start ? parseIsoDate(current.start) : NaN
+        if (Number.isFinite(currentStart) && nextRangeStart >= (currentStart as number)) return prev
+        const next = { ...current, start: new Date(nextRangeStart).toISOString().slice(0, 10) }
+        localStorage.setItem(rangeStorageKey, JSON.stringify(next))
+        return { ...prev, [activeTabId]: next }
+      })
+    }
+  }, [activeTabId, rangeStorageKey])
+
   const editorMode = isAdding ? "add" : selectedItem ? "edit" : null
 
   function closeEditor() {
@@ -524,6 +537,7 @@ export default function Home() {
             selectedId={selectedId}
             rangeStart={rangeStart}
             rangeEnd={rangeEnd}
+            onRequestRangeStart={requestRangeStart}
             sort={sort}
             filters={filters}
             resetToken={resetToken}

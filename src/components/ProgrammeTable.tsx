@@ -1740,7 +1740,7 @@ export default function ProgrammeTable({
             </tbody>
           </table>
           {progressLines.length ? (
-            <svg className="absolute left-0 top-0 z-20 h-full w-full" preserveAspectRatio="none">
+            <svg className="pointer-events-none absolute left-0 top-0 z-20 h-full w-full" preserveAspectRatio="none">
               {(() => {
                 const rects = Object.values(scheduleRects)
                 if (!rects.length) return null

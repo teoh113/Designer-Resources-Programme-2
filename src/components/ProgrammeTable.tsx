@@ -28,6 +28,7 @@ type Props = {
   barTypes: BarType[]
   statuses: StatusType[]
   progressLines: ProgressLine[]
+  progressLinesVisible?: boolean
   selectedId: string | null
   rangeStart: number
   rangeEnd: number
@@ -82,6 +83,7 @@ export default function ProgrammeTable({
   barTypes,
   statuses,
   progressLines,
+  progressLinesVisible = true,
   selectedId,
   rangeStart,
   rangeEnd,
@@ -228,8 +230,7 @@ export default function ProgrammeTable({
   const draggedRowRef = useRef<string | null>(null)
   const suppressRowClickUntilRef = useRef(0)
 
-  const filterableKeys = useMemo(() => ["t1No", "items", "srp", "worksManager", "designer", "status"] as const, [])
-  type FilterKey = (typeof filterableKeys)[number]
+  type FilterKey = "t1No" | "items" | "srp" | "worksManager" | "designer" | "status"
   const [filterOpenKey, setFilterOpenKey] = useState<FilterKey | null>(null)
   const [filterPopupStyle, setFilterPopupStyle] = useState<React.CSSProperties>({})
   const filterButtonRefs = useRef<Partial<Record<FilterKey, HTMLButtonElement | null>>>({})
@@ -730,6 +731,39 @@ export default function ProgrammeTable({
   const scheduleWidthPx = useMemo(() => computeScheduleWidthPx(rangeStart, rangeEnd, pxPerDay), [pxPerDay, rangeEnd, rangeStart])
   const maxDayIndex = useMemo(() => Math.round((rangeEnd - rangeStart) / 86400000), [rangeEnd, rangeStart])
 
+  const progressRender = useMemo(() => {
+    if (!progressLines.length) return null
+    const rects = Object.values(scheduleRects)
+    if (!rects.length) return null
+    const left = Math.min(...rects.map(r => r.left))
+    const right = Math.max(...rects.map(r => r.left + r.width))
+    const top = Math.min(...rects.map(r => r.top))
+    const bottom = Math.max(...rects.map(r => r.top + r.height))
+    const lines = progressLines
+      .map(line => {
+        const byItem = new Map(line.points.map(p => [p.itemId, p]))
+        const placed = items
+          .map(item => {
+            const rect = scheduleRects[item.id]
+            const point = byItem.get(item.id)
+            if (!rect || !point) return null
+            const t = parseIsoDate(point.date)
+            const dayX = Number.isFinite(t) ? ((t - rangeStart) / 86400000) * pxPerDay : 0
+            const x = rect.left + Math.max(0, Math.min(scheduleWidthPx, dayX)) - scheduleScrollLeft
+            const y = rect.top + clamp01(point.yRatio) * rect.height
+            return { lineId: line.id, itemId: item.id, rect, x, y, date: point.date, color: line.color, weightPx: line.weightPx }
+          })
+          .filter(
+            (x): x is { lineId: string; itemId: string; rect: { left: number; top: number; width: number; height: number }; x: number; y: number; date: string; color: string; weightPx: number } =>
+              Boolean(x)
+          )
+        return { id: line.id, color: line.color, weightPx: line.weightPx, placed }
+      })
+      .filter(x => x.placed.length)
+    if (!lines.length) return null
+    return { bounds: { left, right, top, bottom }, lines }
+  }, [items, progressLines, pxPerDay, rangeStart, scheduleRects, scheduleScrollLeft, scheduleWidthPx])
+
   function dayIndexFromIso(iso: string) {
     const t = parseIsoDate(iso)
     if (!Number.isFinite(t)) return 0
@@ -759,16 +793,6 @@ export default function ProgrammeTable({
   const stickyFilter = "sticky left-0 z-30 bg-white"
 
   const headerRowRef = useRef<HTMLTableRowElement | null>(null)
-  const [headerRowHeight, setHeaderRowHeight] = useState(44)
-  useLayoutEffect(() => {
-    function measure() {
-      const h = headerRowRef.current?.getBoundingClientRect().height ?? 44
-      setHeaderRowHeight(Math.max(36, Math.round(h)))
-    }
-    measure()
-    window.addEventListener("resize", measure)
-    return () => window.removeEventListener("resize", measure)
-  }, [visibleColumns.length, widths, textSizePx, lineWeightPx])
 
   useLayoutEffect(() => {
     const root = overlayRootRef.current
@@ -1750,43 +1774,28 @@ export default function ProgrammeTable({
               })}
             </tbody>
           </table>
-          {progressLines.length ? (
-            <svg className="absolute left-0 top-0 z-20 h-full w-full" preserveAspectRatio="none">
-              {(() => {
-                const rects = Object.values(scheduleRects)
-                if (!rects.length) return null
-                const left = Math.min(...rects.map(r => r.left))
-                const right = Math.max(...rects.map(r => r.left + r.width))
-                const top = Math.min(...rects.map(r => r.top))
-                const bottom = Math.max(...rects.map(r => r.top + r.height))
-                const clipId = `schedule-clip-${storageNamespace}`
-                return (
-                  <>
-                    <defs>
-                      <clipPath id={clipId}>
-                        <rect x={left} y={top} width={Math.max(0, right - left)} height={Math.max(0, bottom - top)} />
-                      </clipPath>
-                    </defs>
-                    <g clipPath={`url(#${clipId})`}>
-                      {progressLines.map(line => {
-                        const byItem = new Map(line.points.map(p => [p.itemId, p]))
-                        const placed = items
-                          .map(item => {
-                            const rect = scheduleRects[item.id]
-                            const point = byItem.get(item.id)
-                            if (!rect || !point) return null
-                            const t = parseIsoDate(point.date)
-                            const dayX = Number.isFinite(t) ? ((t - rangeStart) / 86400000) * pxPerDay : 0
-                            const x = rect.left + Math.max(0, Math.min(scheduleWidthPx, dayX)) - scheduleScrollLeft
-                            const y = rect.top + clamp01(point.yRatio) * rect.height
-                            return { itemId: item.id, rect, x, y, date: point.date }
-                          })
-                          .filter((x): x is { itemId: string; rect: { left: number; top: number; width: number; height: number }; x: number; y: number; date: string } => Boolean(x))
-
-                        return (
+          {progressLinesVisible && progressRender ? (
+            <>
+              <svg className="pointer-events-none absolute left-0 top-0 z-20 h-full w-full" preserveAspectRatio="none">
+                {(() => {
+                  const clipId = `schedule-clip-${storageNamespace}`
+                  return (
+                    <>
+                      <defs>
+                        <clipPath id={clipId}>
+                          <rect
+                            x={progressRender.bounds.left}
+                            y={progressRender.bounds.top}
+                            width={Math.max(0, progressRender.bounds.right - progressRender.bounds.left)}
+                            height={Math.max(0, progressRender.bounds.bottom - progressRender.bounds.top)}
+                          />
+                        </clipPath>
+                      </defs>
+                      <g clipPath={`url(#${clipId})`}>
+                        {progressRender.lines.map(line => (
                           <g key={line.id}>
-                            {placed.map((p, idx) => {
-                              const next = placed[idx + 1]
+                            {line.placed.map((p, idx) => {
+                              const next = line.placed[idx + 1]
                               if (!next) return null
                               const yMid = (p.y + next.y) / 2
                               const d = `M ${p.x} ${p.y} L ${p.x} ${yMid} L ${next.x} ${yMid} L ${next.x} ${next.y}`
@@ -1799,47 +1808,46 @@ export default function ProgrammeTable({
                                   strokeWidth={line.weightPx}
                                   strokeLinecap="round"
                                   strokeLinejoin="round"
-                                  style={{ pointerEvents: "none" }}
                                 />
                               )
                             })}
-                            {placed.map(p => (
-                              <g key={p.itemId}>
-                                <line
-                                  x1={p.x}
-                                  y1={p.rect.top}
-                                  x2={p.x}
-                                  y2={p.rect.top + p.rect.height}
-                                  stroke={line.color}
-                                  strokeWidth={line.weightPx}
-                                  strokeLinecap="round"
-                                  style={{ pointerEvents: "none" }}
-                                />
-                                <circle
-                                  cx={p.x}
-                                  cy={p.y}
-                                  r={6}
-                                  fill={line.color}
-                                  stroke="#FFFFFF"
-                                  strokeWidth={2}
-                                  style={{ pointerEvents: "all" }}
-                                  onPointerDown={e => {
-                                    e.preventDefault()
-                                    e.stopPropagation()
-                                    ;(e.currentTarget as SVGCircleElement).setPointerCapture(e.pointerId)
-                                    progressDragRef.current = { lineId: line.id, itemId: p.itemId, startX: e.clientX, startDayIndex: dayIndexFromIso(p.date) }
-                                  }}
-                                />
-                              </g>
+                            {line.placed.map(p => (
+                              <line
+                                key={p.itemId}
+                                x1={p.x}
+                                y1={p.rect.top}
+                                x2={p.x}
+                                y2={p.rect.top + p.rect.height}
+                                stroke={line.color}
+                                strokeWidth={line.weightPx}
+                                strokeLinecap="round"
+                              />
                             ))}
                           </g>
-                        )
-                      })}
-                    </g>
-                  </>
-                )
-              })()}
-            </svg>
+                        ))}
+                      </g>
+                    </>
+                  )
+                })()}
+              </svg>
+              {progressRender.lines.flatMap(line =>
+                line.placed.map(p => (
+                  <button
+                    key={`${p.lineId}-${p.itemId}`}
+                    type="button"
+                    className="absolute z-30 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white"
+                    style={{ left: p.x, top: p.y, background: p.color }}
+                    onPointerDown={e => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      e.currentTarget.setPointerCapture(e.pointerId)
+                      progressDragRef.current = { lineId: p.lineId, itemId: p.itemId, startX: e.clientX, startDayIndex: dayIndexFromIso(p.date) }
+                    }}
+                    aria-label="Drag progress point"
+                  />
+                ))
+              )}
+            </>
           ) : null}
         </div>
       </div>

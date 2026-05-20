@@ -4,7 +4,7 @@ import ItemEditor from "@/components/ItemEditor"
 import BarTypesLegend from "@/components/BarTypesLegend"
 import StatusesLegend from "@/components/StatusesLegend"
 import ProgrammeTable, { type FilterState, type SortState } from "@/components/ProgrammeTable"
-import { exportProgrammeViewToExcel } from "@/lib/exportExcel"
+import { exportProgrammeViewToPdf } from "@/lib/exportPdf"
 import { downloadAppBackup, restoreAppBackup } from "@/lib/appBackup"
 import { useProgrammeStore } from "@/store/programmeStore"
 import type { ProgrammeItem, ProgrammeItemInput, ScheduleSegment, SortKey } from "@/types/programme"
@@ -493,9 +493,9 @@ export default function Home() {
                 const tabName = (activeTab?.name ?? "Table").trim() || "Table"
                 const safe = tabName.replace(/[\\/:*?"<>|]+/g, " ").trim().replace(/\s+/g, "_")
                 const date = new Date().toISOString().slice(0, 10)
-                void exportProgrammeViewToExcel({
-                  fileName: `${safe || "Table"}_${date}.xlsx`,
-                  sheetName: tabName,
+                void exportProgrammeViewToPdf({
+                  fileName: `${safe || "Table"}_${date}.pdf`,
+                  title: tabName,
                   items: visibleItems,
                   barTypes,
                   statuses,
@@ -503,7 +503,7 @@ export default function Home() {
               }}
               className="inline-flex items-center gap-2 rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-700 transition hover:bg-zinc-50"
             >
-              Export Excel
+              Export PDF
             </button>
             <button
               type="button"

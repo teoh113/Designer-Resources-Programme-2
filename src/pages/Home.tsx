@@ -168,8 +168,7 @@ export default function Home() {
     const maxCandidate = times.length ? Math.max(...times) : fallback + 86400000
     const overrideStart = rangeOverride.start ? parseIsoDate(rangeOverride.start) : NaN
     const overrideEnd = rangeOverride.end ? parseIsoDate(rangeOverride.end) : NaN
-    const paddedMinCandidate = minCandidate - 30 * 86400000
-    const min = Number.isFinite(overrideStart) ? overrideStart : paddedMinCandidate
+    const min = Number.isFinite(overrideStart) ? overrideStart : minCandidate
     const maxBase = Number.isFinite(overrideEnd) ? overrideEnd : Math.max(maxCandidate, forcedEnd)
     const max = Math.max(maxBase, min + 86400000)
     if (max <= min) return { rangeStart: min, rangeEnd: min + 86400000 }

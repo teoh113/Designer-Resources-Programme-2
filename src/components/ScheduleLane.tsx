@@ -238,13 +238,15 @@ export default function ScheduleLane({ segments, barTypes, rangeStart, rangeEnd,
 
       if (state.mode === "move") {
         const len = Math.max(0, baseEnd - baseStart)
-        const nextStart = clamp(baseStart + deltaDays, 0, maxDay)
-        const nextEnd = clamp(nextStart + len, 0, maxDay)
+        const nextStartUnclamped = baseStart + deltaDays
+        const nextEndUnclamped = nextStartUnclamped + len
+        const nextEnd = nextEndUnclamped > maxDay ? maxDay : nextEndUnclamped
+        const nextStart = nextEndUnclamped > maxDay ? nextEnd - len : nextStartUnclamped
         return { ...seg, startDate: isoFromDayIndex(rangeStart, nextStart), endDate: isoFromDayIndex(rangeStart, nextEnd) }
       }
 
       if (state.mode === "start") {
-        const nextStart = clamp(baseStart + deltaDays, 0, baseEnd)
+        const nextStart = Math.min(baseStart + deltaDays, baseEnd)
         return { ...seg, startDate: isoFromDayIndex(rangeStart, nextStart) }
       }
 

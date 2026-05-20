@@ -190,9 +190,23 @@ export default function Home() {
       }
       const result = updateItem(id, input)
       if ("error" in result) return { ok: false, error: result.error } as const
+
+      if (patch.segments && rangeOverride.start) {
+        const overrideStart = parseIsoDate(rangeOverride.start)
+        const times = patch.segments
+          .flatMap(seg => [parseIsoDate(seg.startDate), parseIsoDate(seg.endDate)])
+          .filter(t => Number.isFinite(t))
+        const earliest = times.length ? Math.min(...times) : NaN
+        if (Number.isFinite(overrideStart) && Number.isFinite(earliest) && (earliest as number) < (overrideStart as number)) {
+          const next = { ...rangeOverride, start: new Date(earliest as number).toISOString().slice(0, 10) }
+          setRangeOverrideByTab(prev => ({ ...prev, [activeTabId]: next }))
+          localStorage.setItem(rangeStorageKey, JSON.stringify(next))
+        }
+      }
+
       return { ok: true } as const
     }
-  }, [items, updateItem])
+  }, [activeTabId, items, rangeOverride, rangeStorageKey, updateItem])
 
   const editorMode = isAdding ? "add" : selectedItem ? "edit" : null
 

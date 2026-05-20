@@ -28,7 +28,7 @@ type Props = {
   barTypes: BarType[]
   statuses: StatusType[]
   progressLines: ProgressLine[]
-  progressLinesVisible?: boolean
+  hiddenBarTypeIds?: string[]
   selectedId: string | null
   rangeStart: number
   rangeEnd: number
@@ -83,7 +83,7 @@ export default function ProgrammeTable({
   barTypes,
   statuses,
   progressLines,
-  progressLinesVisible = true,
+  hiddenBarTypeIds = [],
   selectedId,
   rangeStart,
   rangeEnd,
@@ -111,7 +111,19 @@ export default function ProgrammeTable({
   const lineColorStorageKey = `${ns}table_line_color_v1`
   const textSizeStorageKey = `${ns}table_text_size_v1`
   const rowHeightStorageKey = `${ns}table_row_height_v1`
+  const progressHiddenStorageKey = `${ns}progress_line_hidden_v1`
   const legacy = storageNamespace === "default"
+  const [hiddenProgressLineIds, setHiddenProgressLineIds] = useState<string[]>(() => {
+    const raw = localStorage.getItem(progressHiddenStorageKey) ?? (legacy ? localStorage.getItem("drp_progress_line_hidden_v1") : null)
+    if (!raw) return []
+    try {
+      const parsed = JSON.parse(raw) as unknown
+      if (!Array.isArray(parsed)) return []
+      return parsed.filter((x): x is string => typeof x === "string")
+    } catch {
+      return []
+    }
+  })
   const [widths, setWidths] = useState<Record<ColKey, number>>(() => {
     const defaults: Record<ColKey, number> = {
       t1No: 150,
@@ -220,6 +232,10 @@ export default function ProgrammeTable({
   useEffect(() => {
     localStorage.setItem(lineColorStorageKey, lineColor)
   }, [lineColor])
+
+  useEffect(() => {
+    localStorage.setItem(progressHiddenStorageKey, JSON.stringify(hiddenProgressLineIds))
+  }, [hiddenProgressLineIds])
 
   const visibleColumns = useMemo(() => {
     const byKey = new Map(columns.map(c => [c.key, c]))
@@ -731,15 +747,20 @@ export default function ProgrammeTable({
   const scheduleWidthPx = useMemo(() => computeScheduleWidthPx(rangeStart, rangeEnd, pxPerDay), [pxPerDay, rangeEnd, rangeStart])
   const maxDayIndex = useMemo(() => Math.round((rangeEnd - rangeStart) / 86400000), [rangeEnd, rangeStart])
 
+  const visibleProgressLines = useMemo(
+    () => progressLines.filter(line => !hiddenProgressLineIds.includes(line.id)),
+    [hiddenProgressLineIds, progressLines]
+  )
+
   const progressRender = useMemo(() => {
-    if (!progressLines.length) return null
+    if (!visibleProgressLines.length) return null
     const rects = Object.values(scheduleRects)
     if (!rects.length) return null
     const left = Math.min(...rects.map(r => r.left))
     const right = Math.max(...rects.map(r => r.left + r.width))
     const top = Math.min(...rects.map(r => r.top))
     const bottom = Math.max(...rects.map(r => r.top + r.height))
-    const lines = progressLines
+    const lines = visibleProgressLines
       .map(line => {
         const byItem = new Map(line.points.map(p => [p.itemId, p]))
         const placed = items
@@ -762,7 +783,7 @@ export default function ProgrammeTable({
       .filter(x => x.placed.length)
     if (!lines.length) return null
     return { bounds: { left, right, top, bottom }, lines }
-  }, [items, progressLines, pxPerDay, rangeStart, scheduleRects, scheduleScrollLeft, scheduleWidthPx])
+  }, [items, pxPerDay, rangeStart, scheduleRects, scheduleScrollLeft, scheduleWidthPx, visibleProgressLines])
 
   function dayIndexFromIso(iso: string) {
     const t = parseIsoDate(iso)
@@ -1060,8 +1081,17 @@ export default function ProgrammeTable({
                 </div>
                 <div className="grid max-h-[55vh] gap-2 overflow-auto p-3">
                   {progressLines.map(line => (
-                    <div key={line.id} className="grid gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-3">
-                      <div className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-2">
+                    <div key={line.id} className={cn("grid gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-3", hiddenProgressLineIds.includes(line.id) ? "opacity-50" : "")}>
+                      <div className="grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={!hiddenProgressLineIds.includes(line.id)}
+                          onChange={() =>
+                            setHiddenProgressLineIds(prev => (prev.includes(line.id) ? prev.filter(x => x !== line.id) : [...prev, line.id]))
+                          }
+                          className="h-4 w-4 rounded border-zinc-300"
+                          aria-label="Show progress line"
+                        />
                         <input
                           value={line.name}
                           onChange={e => onUpdateProgressLine(line.id, { name: e.target.value })}
@@ -1683,6 +1713,7 @@ export default function ProgrammeTable({
                         paddingTop: schedulePadY,
                         paddingBottom: schedulePadY,
                       }
+                      const visibleSegments = item.segments.filter(seg => !hiddenBarTypeIds.includes(seg.barTypeId))
                       return (
                         <td key={col.key} className={baseClass} style={scheduleStyle}>
                           <div
@@ -1698,7 +1729,7 @@ export default function ProgrammeTable({
                           >
                             <div style={{ transform: `translateX(-${scheduleScrollLeft}px)` }}>
                               <ScheduleLane
-                                segments={item.segments}
+                                segments={visibleSegments}
                                 barTypes={barTypes}
                                 rangeStart={rangeStart}
                                 rangeEnd={rangeEnd}
@@ -1774,7 +1805,7 @@ export default function ProgrammeTable({
               })}
             </tbody>
           </table>
-          {progressLinesVisible && progressRender ? (
+          {progressRender ? (
             <>
               <svg className="pointer-events-none absolute left-0 top-0 z-20 h-full w-full" preserveAspectRatio="none">
                 {(() => {

@@ -412,14 +412,16 @@ export const useProgrammeStore = create<ProgrammeState>()(
         activeTabId: state.activeTabId,
       }),
       migrate: persistedState => {
-        const state = persistedState as any
+        const state =
+          persistedState && typeof persistedState === "object" ? (persistedState as Record<string, unknown>) : ({} as Record<string, unknown>)
 
-        function normalizeTab(rawTab: any): ProgrammeTab | null {
+        function normalizeTab(rawTab: unknown): ProgrammeTab | null {
           if (!rawTab || typeof rawTab !== "object") return null
-          const id = typeof rawTab.id === "string" && rawTab.id.trim() ? rawTab.id : `tab-${makeId()}`
-          const name = typeof rawTab.name === "string" && rawTab.name.trim() ? rawTab.name : "Table"
+          const tab = rawTab as Record<string, unknown>
+          const id = typeof tab.id === "string" && tab.id.trim() ? tab.id : `tab-${makeId()}`
+          const name = typeof tab.name === "string" && tab.name.trim() ? tab.name : "Table"
 
-          const rawBarTypes = (rawTab.barTypes ?? []) as Array<Partial<BarType>>
+          const rawBarTypes = (Array.isArray(tab.barTypes) ? tab.barTypes : []) as Array<Partial<BarType>>
           const baseBarTypes: BarType[] = rawBarTypes
             .filter(b => typeof b.id === "string" && typeof b.name === "string" && typeof b.color === "string")
             .map(b => ({ id: b.id as string, name: b.name as string, color: b.color as string }))
@@ -428,7 +430,7 @@ export const useProgrammeStore = create<ProgrammeState>()(
           const ensuredBarTypes = baseBarTypes.length ? baseBarTypes.slice() : defaultBarTypes.slice()
           for (const bt of ensuredBarTypes) colorToTypeId.set(bt.color.toLowerCase(), bt.id)
 
-          const statusesRaw = (rawTab.statuses ?? []) as Array<Partial<StatusType>>
+          const statusesRaw = (Array.isArray(tab.statuses) ? tab.statuses : []) as Array<Partial<StatusType>>
           const baseStatuses: StatusType[] = statusesRaw
             .filter(s => typeof s.id === "string" && typeof s.name === "string" && typeof s.color === "string")
             .map(s => ({
@@ -439,7 +441,8 @@ export const useProgrammeStore = create<ProgrammeState>()(
             }))
           const ensuredStatuses = baseStatuses.length ? baseStatuses : defaultStatuses.slice()
 
-          const items = ((rawTab.items ?? []) as Array<Record<string, unknown>>).map(raw => {
+          const rawItems = (Array.isArray(tab.items) ? tab.items : []) as Array<Record<string, unknown>>
+          const items = rawItems.map(raw => {
             const t1Raw = raw.t1No
             const t1No = typeof t1Raw === "string" ? t1Raw : typeof t1Raw === "number" ? String(t1Raw) : ""
 
@@ -498,7 +501,8 @@ export const useProgrammeStore = create<ProgrammeState>()(
           })
 
           const derived = derivePeopleOptions(items)
-          const lines = normalizeProgressLines(Array.isArray(rawTab.progressLines) ? rawTab.progressLines : [], items)
+          const rawLines = (Array.isArray(tab.progressLines) ? tab.progressLines : []) as unknown as ProgressLine[]
+          const lines = normalizeProgressLines(rawLines, items)
 
           return {
             id,
@@ -513,8 +517,9 @@ export const useProgrammeStore = create<ProgrammeState>()(
           }
         }
 
-        if (Array.isArray(state?.tabs)) {
-          const tabs = (state.tabs as any[]).map(normalizeTab).filter((t): t is ProgrammeTab => Boolean(t))
+        const tabsRaw = state.tabs
+        if (Array.isArray(tabsRaw)) {
+          const tabs = tabsRaw.map(normalizeTab).filter((t): t is ProgrammeTab => Boolean(t))
           const ensured = tabs.length ? tabs : [makeDefaultTab("default", "Table 1")]
           const activeTabId =
             typeof state.activeTabId === "string" && ensured.some(t => t.id === state.activeTabId) ? state.activeTabId : ensured[0]!.id

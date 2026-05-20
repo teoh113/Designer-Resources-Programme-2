@@ -228,8 +228,7 @@ export default function ProgrammeTable({
   const draggedRowRef = useRef<string | null>(null)
   const suppressRowClickUntilRef = useRef(0)
 
-  const filterableKeys = useMemo(() => ["t1No", "items", "srp", "worksManager", "designer", "status"] as const, [])
-  type FilterKey = (typeof filterableKeys)[number]
+  type FilterKey = "t1No" | "items" | "srp" | "worksManager" | "designer" | "status"
   const [filterOpenKey, setFilterOpenKey] = useState<FilterKey | null>(null)
   const [filterPopupStyle, setFilterPopupStyle] = useState<React.CSSProperties>({})
   const filterButtonRefs = useRef<Partial<Record<FilterKey, HTMLButtonElement | null>>>({})
@@ -759,16 +758,6 @@ export default function ProgrammeTable({
   const stickyFilter = "sticky left-0 z-30 bg-white"
 
   const headerRowRef = useRef<HTMLTableRowElement | null>(null)
-  const [headerRowHeight, setHeaderRowHeight] = useState(44)
-  useLayoutEffect(() => {
-    function measure() {
-      const h = headerRowRef.current?.getBoundingClientRect().height ?? 44
-      setHeaderRowHeight(Math.max(36, Math.round(h)))
-    }
-    measure()
-    window.addEventListener("resize", measure)
-    return () => window.removeEventListener("resize", measure)
-  }, [visibleColumns.length, widths, textSizePx, lineWeightPx])
 
   useLayoutEffect(() => {
     const root = overlayRootRef.current

@@ -462,7 +462,7 @@ export default function Home() {
                   items: visibleItems,
                   barTypes,
                   statuses,
-                })
+                }).catch(() => window.alert("Export failed."))
               }}
               className="inline-flex items-center gap-2 rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-700 transition hover:bg-zinc-50"
             >

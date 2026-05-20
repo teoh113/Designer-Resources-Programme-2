@@ -6,6 +6,8 @@ import { cn } from "@/lib/utils"
 type Props = {
   barTypes: BarType[]
   open: boolean
+  hiddenIds: string[]
+  onToggleHidden: (id: string) => void
   onOpenChange: (open: boolean) => void
   onUpsert: (barType: BarType) => void
   onRemove: (id: string) => void
@@ -16,7 +18,7 @@ function makeId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
-export default function BarTypesLegend({ barTypes, open, onOpenChange, onUpsert, onRemove }: Props) {
+export default function BarTypesLegend({ barTypes, open, hiddenIds, onToggleHidden, onOpenChange, onUpsert, onRemove }: Props) {
   const [manageOpen, setManageOpen] = useState(false)
   const palette = useMemo(
     () => ["#00E5A8", "#3B82F6", "#F97316", "#A855F7", "#EF4444", "#22C55E", "#06B6D4", "#111827"],
@@ -38,7 +40,10 @@ export default function BarTypesLegend({ barTypes, open, onOpenChange, onUpsert,
         <span className="text-zinc-300">•</span>
         <span className="text-xs text-zinc-600">{barTypes.length}</span>
         <span className="ml-1 flex items-center gap-1">
-          {barTypes.slice(0, 6).map(bt => (
+          {barTypes
+            .filter(bt => !hiddenIds.includes(bt.id))
+            .slice(0, 6)
+            .map(bt => (
             <span key={bt.id} className="h-2.5 w-2.5 rounded-full" style={{ background: bt.color }} />
           ))}
         </span>
@@ -53,14 +58,23 @@ export default function BarTypesLegend({ barTypes, open, onOpenChange, onUpsert,
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {barTypes.map(bt => (
-                <div
+                <label
                   key={bt.id}
-                  className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-[11px] text-zinc-700"
+                  className={cn(
+                    "inline-flex cursor-pointer items-center gap-2 rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-[11px] text-zinc-700",
+                    hiddenIds.includes(bt.id) ? "opacity-45" : ""
+                  )}
                   title={bt.name}
                 >
+                  <input
+                    type="checkbox"
+                    checked={!hiddenIds.includes(bt.id)}
+                    onChange={() => onToggleHidden(bt.id)}
+                    className="h-3.5 w-3.5 rounded border-zinc-300"
+                  />
                   <span className="h-2.5 w-2.5 rounded-full" style={{ background: bt.color }} />
-                  <span className="max-w-[160px] truncate">{bt.name}</span>
-                </div>
+                  <span className="max-w-[150px] truncate">{bt.name}</span>
+                </label>
               ))}
             </div>
             <div className="flex items-center justify-between gap-2">
@@ -99,8 +113,18 @@ export default function BarTypesLegend({ barTypes, open, onOpenChange, onUpsert,
               {barTypes.map(bt => (
                 <div
                   key={bt.id}
-                  className="grid grid-cols-[124px_1fr_auto] items-center gap-3 rounded-lg border border-zinc-200 bg-white p-3"
+                  className={cn(
+                    "grid grid-cols-[auto_124px_1fr_auto] items-center gap-3 rounded-lg border border-zinc-200 bg-white p-3",
+                    hiddenIds.includes(bt.id) ? "opacity-60" : ""
+                  )}
                 >
+                  <input
+                    type="checkbox"
+                    checked={!hiddenIds.includes(bt.id)}
+                    onChange={() => onToggleHidden(bt.id)}
+                    className="h-4 w-4 rounded border-zinc-300"
+                    aria-label="Show bar type"
+                  />
                   <div className="flex items-center gap-3">
                     <input
                       type="color"

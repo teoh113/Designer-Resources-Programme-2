@@ -1,9 +1,11 @@
-import { Plus } from "lucide-react"
-import { useMemo, useState } from "react"
+import { Plus, X } from "lucide-react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import ItemEditor from "@/components/ItemEditor"
 import BarTypesLegend from "@/components/BarTypesLegend"
 import StatusesLegend from "@/components/StatusesLegend"
 import ProgrammeTable, { type FilterState, type SortState } from "@/components/ProgrammeTable"
+import { exportProgrammeViewToExcel } from "@/lib/exportExcel"
+import { downloadAppBackup, restoreAppBackup } from "@/lib/appBackup"
 import { useProgrammeStore } from "@/store/programmeStore"
 import type { ProgrammeItem, ProgrammeItemInput, ScheduleSegment, SortKey } from "@/types/programme"
 import { parseIsoDate } from "@/utils/date"
@@ -30,9 +32,17 @@ function sortValue(item: ProgrammeItem, key: SortKey) {
 }
 
 export default function Home() {
-  const items = useProgrammeStore(s => s.items)
-  const barTypes = useProgrammeStore(s => s.barTypes)
-  const statuses = useProgrammeStore(s => s.statuses)
+  const tabs = useProgrammeStore(s => s.tabs)
+  const activeTabId = useProgrammeStore(s => s.activeTabId)
+  const selectTab = useProgrammeStore(s => s.selectTab)
+  const addTab = useProgrammeStore(s => s.addTab)
+  const renameTab = useProgrammeStore(s => s.renameTab)
+  const removeTab = useProgrammeStore(s => s.removeTab)
+
+  const activeTab = useMemo(() => tabs.find(t => t.id === activeTabId) ?? tabs[0] ?? null, [activeTabId, tabs])
+  const items = activeTab?.items ?? []
+  const barTypes = activeTab?.barTypes ?? []
+  const statuses = activeTab?.statuses ?? []
   const selectedId = useProgrammeStore(s => s.selectedId)
   const select = useProgrammeStore(s => s.select)
   const addItem = useProgrammeStore(s => s.addItem)
@@ -44,25 +54,43 @@ export default function Home() {
   const removeBarType = useProgrammeStore(s => s.removeBarType)
   const upsertStatus = useProgrammeStore(s => s.upsertStatus)
   const removeStatus = useProgrammeStore(s => s.removeStatus)
+  const progressLines = activeTab?.progressLines ?? []
+  const addProgressLine = useProgrammeStore(s => s.addProgressLine)
+  const updateProgressLine = useProgrammeStore(s => s.updateProgressLine)
+  const removeProgressLine = useProgrammeStore(s => s.removeProgressLine)
+  const setProgressPoint = useProgrammeStore(s => s.setProgressPoint)
+  const restoreInputRef = useRef<HTMLInputElement | null>(null)
 
-  const [sort, setSort] = useState<SortState>(null)
-  const [filters, setFilters] = useState<FilterState>(emptyFilters)
+  const [sortByTab, setSortByTab] = useState<Record<string, SortState>>({})
+  const [filtersByTab, setFiltersByTab] = useState<Record<string, FilterState>>({})
+  const sort = sortByTab[activeTabId] ?? null
+  const filters = filtersByTab[activeTabId] ?? emptyFilters
   const [isAdding, setIsAdding] = useState(false)
   const [rangeOpen, setRangeOpen] = useState(false)
   const [barsOpen, setBarsOpen] = useState(false)
   const [statusesOpen, setStatusesOpen] = useState(false)
-  const [resetToken, setResetToken] = useState(0)
-  const rangeStorageKey = "drp_schedule_range_override_v1"
-  const [rangeOverride, setRangeOverride] = useState<{ start: string; end: string }>(() => {
+  const [resetTokenByTab, setResetTokenByTab] = useState<Record<string, number>>({})
+  const resetToken = resetTokenByTab[activeTabId] ?? 0
+
+  const [rangeOverrideByTab, setRangeOverrideByTab] = useState<Record<string, { start: string; end: string }>>({})
+  const rangeStorageKey = useMemo(() => `drp_${activeTabId}_schedule_range_override_v1`, [activeTabId])
+  const rangeOverride = rangeOverrideByTab[activeTabId] ?? { start: "", end: "2029-05-29" }
+
+  useEffect(() => {
+    if (!activeTabId) return
+    if (rangeOverrideByTab[activeTabId]) return
     const raw = localStorage.getItem(rangeStorageKey)
-    if (!raw) return { start: "", end: "2029-05-29" }
+    if (!raw) {
+      setRangeOverrideByTab(prev => ({ ...prev, [activeTabId]: { start: "", end: "2029-05-29" } }))
+      return
+    }
     try {
       const parsed = JSON.parse(raw) as Partial<{ start: string; end: string }>
-      return { start: parsed.start ?? "", end: parsed.end ?? "2029-05-29" }
+      setRangeOverrideByTab(prev => ({ ...prev, [activeTabId]: { start: parsed.start ?? "", end: parsed.end ?? "2029-05-29" } }))
     } catch {
-      return { start: "", end: "2029-05-29" }
+      setRangeOverrideByTab(prev => ({ ...prev, [activeTabId]: { start: "", end: "2029-05-29" } }))
     }
-  })
+  }, [activeTabId, rangeOverrideByTab, rangeStorageKey])
 
   const selectedItem = useMemo(() => items.find(i => i.id === selectedId) ?? null, [items, selectedId])
 
@@ -220,6 +248,64 @@ export default function Home() {
               Add items, assign SRP / Works Manager / Designer, and visualize the schedule as a bar from start date to
               target delivery date. Use the header to sort and the filter row to narrow the list.
             </p>
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              {tabs.map(tab => {
+                const active = tab.id === activeTabId
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => {
+                      selectTab(tab.id)
+                      setIsAdding(false)
+                      setRangeOpen(false)
+                      setStatusesOpen(false)
+                      setBarsOpen(false)
+                      select(null)
+                    }}
+                    onDoubleClick={() => {
+                      const next = window.prompt("Rename table", tab.name)
+                      if (next) renameTab(tab.id, next)
+                    }}
+                    className={active ? "inline-flex items-center gap-2 rounded-full bg-zinc-900 px-3 py-1.5 text-xs text-white" : "inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs text-zinc-700 hover:bg-zinc-50"}
+                  >
+                    <span className="max-w-[180px] truncate">{tab.name}</span>
+                    {tabs.length > 1 ? (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={e => {
+                          e.stopPropagation()
+                          const ok = window.confirm(`Delete "${tab.name}"?`)
+                          if (ok) removeTab(tab.id)
+                        }}
+                        onKeyDown={e => {
+                          if (e.key !== "Enter") return
+                          e.stopPropagation()
+                          const ok = window.confirm(`Delete "${tab.name}"?`)
+                          if (ok) removeTab(tab.id)
+                        }}
+                        className={active ? "inline-flex h-4 w-4 items-center justify-center rounded-full bg-white/15" : "inline-flex h-4 w-4 items-center justify-center rounded-full bg-zinc-100"}
+                      >
+                        <X className={active ? "h-3 w-3 text-white" : "h-3 w-3 text-zinc-600"} />
+                      </span>
+                    ) : null}
+                  </button>
+                )
+              })}
+              <button
+                type="button"
+                onClick={() => {
+                  const name = window.prompt("New table name", `Table ${tabs.length + 1}`) ?? ""
+                  addTab(name)
+                }}
+                className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs text-zinc-700 transition hover:bg-zinc-50"
+              >
+                <Plus className="h-4 w-4" />
+                New table
+              </button>
+              <div className="text-[11px] text-zinc-500">Double-click a tab to rename.</div>
+            </div>
           </div>
 
           <div className="flex items-center gap-2">
@@ -262,7 +348,7 @@ export default function Home() {
                         <input
                           type="date"
                           value={rangeOverride.start}
-                          onChange={e => setRangeOverride(v => ({ ...v, start: e.target.value }))}
+                          onChange={e => setRangeOverrideByTab(prev => ({ ...prev, [activeTabId]: { ...rangeOverride, start: e.target.value } }))}
                           className="h-10 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-900 outline-none focus:border-zinc-400"
                         />
                       </label>
@@ -271,7 +357,7 @@ export default function Home() {
                         <input
                           type="date"
                           value={rangeOverride.end}
-                          onChange={e => setRangeOverride(v => ({ ...v, end: e.target.value }))}
+                          onChange={e => setRangeOverrideByTab(prev => ({ ...prev, [activeTabId]: { ...rangeOverride, end: e.target.value } }))}
                           className="h-10 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-900 outline-none focus:border-zinc-400"
                         />
                       </label>
@@ -281,7 +367,7 @@ export default function Home() {
                         type="button"
                         onClick={() => {
                           const start = rangeOverride.start || new Date().toISOString().slice(0, 10)
-                          setRangeOverride(v => ({ ...v, start, end: addMonths(start, 3) }))
+                          setRangeOverrideByTab(prev => ({ ...prev, [activeTabId]: { ...rangeOverride, start, end: addMonths(start, 3) } }))
                         }}
                         className="rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-xs text-zinc-700 transition hover:bg-zinc-50"
                       >
@@ -291,7 +377,7 @@ export default function Home() {
                         type="button"
                         onClick={() => {
                           const start = rangeOverride.start || new Date().toISOString().slice(0, 10)
-                          setRangeOverride(v => ({ ...v, start, end: addMonths(start, 6) }))
+                          setRangeOverrideByTab(prev => ({ ...prev, [activeTabId]: { ...rangeOverride, start, end: addMonths(start, 6) } }))
                         }}
                         className="rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-xs text-zinc-700 transition hover:bg-zinc-50"
                       >
@@ -301,7 +387,7 @@ export default function Home() {
                         type="button"
                         onClick={() => {
                           const start = rangeOverride.start || new Date().toISOString().slice(0, 10)
-                          setRangeOverride(v => ({ ...v, start, end: addMonths(start, 9) }))
+                          setRangeOverrideByTab(prev => ({ ...prev, [activeTabId]: { ...rangeOverride, start, end: addMonths(start, 9) } }))
                         }}
                         className="rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-xs text-zinc-700 transition hover:bg-zinc-50"
                       >
@@ -311,7 +397,7 @@ export default function Home() {
                         type="button"
                         onClick={() => {
                           const start = rangeOverride.start || new Date().toISOString().slice(0, 10)
-                          setRangeOverride(v => ({ ...v, start, end: addMonths(start, 12) }))
+                          setRangeOverrideByTab(prev => ({ ...prev, [activeTabId]: { ...rangeOverride, start, end: addMonths(start, 12) } }))
                         }}
                         className="rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-xs text-zinc-700 transition hover:bg-zinc-50"
                       >
@@ -322,7 +408,7 @@ export default function Home() {
                       <button
                         type="button"
                         onClick={() => {
-                          setRangeOverride({ start: "", end: "2029-05-29" })
+                          setRangeOverrideByTab(prev => ({ ...prev, [activeTabId]: { start: "", end: "2029-05-29" } }))
                           localStorage.setItem(rangeStorageKey, JSON.stringify({ start: "", end: "2029-05-29" }))
                         }}
                         className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 transition hover:bg-zinc-50"
@@ -356,30 +442,68 @@ export default function Home() {
             <button
               type="button"
               onClick={() => {
-                setSort(null)
-                setFilters(emptyFilters)
-                setResetToken(v => v + 1)
+                setSortByTab(prev => ({ ...prev, [activeTabId]: null }))
+                setFiltersByTab(prev => ({ ...prev, [activeTabId]: emptyFilters }))
+                setResetTokenByTab(prev => ({ ...prev, [activeTabId]: (prev[activeTabId] ?? 0) + 1 }))
               }}
               className="inline-flex items-center gap-2 rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-700 transition hover:bg-zinc-50"
             >
               Reset view
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const tabName = (activeTab?.name ?? "Table").trim() || "Table"
+                const safe = tabName.replace(/[\\/:*?"<>|]+/g, " ").trim().replace(/\s+/g, "_")
+                const date = new Date().toISOString().slice(0, 10)
+                void exportProgrammeViewToExcel({
+                  fileName: `${safe || "Table"}_${date}.xlsx`,
+                  sheetName: tabName,
+                  items: visibleItems,
+                  barTypes,
+                  statuses,
+                })
+              }}
+              className="inline-flex items-center gap-2 rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-700 transition hover:bg-zinc-50"
+            >
+              Export Excel
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const date = new Date().toISOString().slice(0, 10)
+                downloadAppBackup(`programme_backup_${date}.json`)
+              }}
+              className="inline-flex items-center gap-2 rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-700 transition hover:bg-zinc-50"
+            >
+              Backup
+            </button>
+            <button
+              type="button"
+              onClick={() => restoreInputRef.current?.click()}
+              className="inline-flex items-center gap-2 rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-700 transition hover:bg-zinc-50"
+            >
+              Restore
             </button>
           </div>
         </div>
 
         <div className="mt-8">
           <ProgrammeTable
+            tableName={activeTab?.name ?? "Table"}
+            storageNamespace={activeTab?.id ?? "default"}
             items={visibleItems}
             barTypes={barTypes}
             statuses={statuses}
+            progressLines={progressLines}
             selectedId={selectedId}
             rangeStart={rangeStart}
             rangeEnd={rangeEnd}
             sort={sort}
             filters={filters}
             resetToken={resetToken}
-            onSortChange={setSort}
-            onFiltersChange={setFilters}
+            onSortChange={next => setSortByTab(prev => ({ ...prev, [activeTabId]: next }))}
+            onFiltersChange={next => setFiltersByTab(prev => ({ ...prev, [activeTabId]: next }))}
             onSelect={id => {
               setIsAdding(false)
               select(id)
@@ -390,10 +514,14 @@ export default function Home() {
             onUpdateItem={updatePartial}
             onSetStatus={setStatus}
             onMoveRow={(sourceId, targetId) => {
-              setSort(null)
+              setSortByTab(prev => ({ ...prev, [activeTabId]: null }))
               moveItem(sourceId, targetId)
             }}
             onDelete={removeItem}
+            onAddProgressLine={() => addProgressLine()}
+            onUpdateProgressLine={updateProgressLine}
+            onRemoveProgressLine={removeProgressLine}
+            onSetProgressPoint={setProgressPoint}
           />
           {items.length === 0 ? (
             <div className="mt-4 rounded-xl border border-zinc-200 bg-white px-4 py-4 text-sm text-zinc-600">
@@ -401,6 +529,34 @@ export default function Home() {
             </div>
           ) : null}
         </div>
+        <input
+          ref={restoreInputRef}
+          type="file"
+          accept="application/json"
+          className="hidden"
+          onChange={e => {
+            const file = e.currentTarget.files?.[0]
+            e.currentTarget.value = ""
+            if (!file) return
+            const reader = new FileReader()
+            reader.onload = () => {
+              try {
+                const parsed = JSON.parse(String(reader.result ?? "null"))
+                const ok = window.confirm("This will overwrite all programme data and settings. Continue?")
+                if (!ok) return
+                const result = restoreAppBackup(parsed)
+                if (result.ok === false) {
+                  window.alert(result.error)
+                  return
+                }
+                window.location.reload()
+              } catch {
+                window.alert("Invalid backup file.")
+              }
+            }
+            reader.readAsText(file)
+          }}
+        />
       </div>
 
       {editorMode ? (

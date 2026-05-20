@@ -69,6 +69,10 @@ export default function Home() {
   const [rangeOpen, setRangeOpen] = useState(false)
   const [barsOpen, setBarsOpen] = useState(false)
   const [statusesOpen, setStatusesOpen] = useState(false)
+  const [viewOpen, setViewOpen] = useState(false)
+  const [barsLegendVisible, setBarsLegendVisible] = useState(true)
+  const [progressVisibleByTab, setProgressVisibleByTab] = useState<Record<string, boolean>>({})
+  const progressLinesVisible = progressVisibleByTab[activeTabId] ?? true
   const [resetTokenByTab, setResetTokenByTab] = useState<Record<string, number>>({})
   const resetToken = resetTokenByTab[activeTabId] ?? 0
 
@@ -208,20 +212,78 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-[radial-gradient(900px_650px_at_22%_12%,rgba(0,229,168,.12),transparent_65%),radial-gradient(900px_650px_at_88%_18%,rgba(8,145,178,.10),transparent_62%),linear-gradient(180deg,#FFFFFF,#F7F7FA)] text-zinc-950">
       <div className="fixed right-6 top-6 z-50 flex flex-col items-end gap-2">
-        <BarTypesLegend
-          barTypes={barTypes}
-          open={barsOpen}
-          onOpenChange={open => {
-            setBarsOpen(open)
-            if (open) {
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => {
+              setViewOpen(v => !v)
+              setBarsOpen(false)
               setStatusesOpen(false)
               setRangeOpen(false)
               closeEditor()
-            }
-          }}
-          onUpsert={upsertBarType}
-          onRemove={removeBarType}
-        />
+            }}
+            className="inline-flex items-center gap-2 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 shadow-[0_12px_36px_rgba(0,0,0,.08)] transition hover:bg-zinc-50"
+          >
+            <span className="text-[11px] uppercase tracking-[0.22em] text-zinc-500">View</span>
+          </button>
+          {viewOpen ? (
+            <div className="absolute right-0 top-[calc(100%+10px)] z-40 w-[300px] max-w-[90vw] overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-[0_24px_80px_rgba(0,0,0,.16)]">
+              <div className="border-b border-zinc-200 px-4 py-3">
+                <div className="text-[11px] uppercase tracking-[0.22em] text-zinc-500">Show / Hide</div>
+                <div className="text-sm font-medium text-zinc-900">Overlays</div>
+              </div>
+              <div className="grid gap-3 p-4">
+                <label className="flex items-center justify-between gap-3 text-sm text-zinc-700">
+                  <span>Bars legend</span>
+                  <input
+                    type="checkbox"
+                    checked={barsLegendVisible}
+                    onChange={() => {
+                      setBarsLegendVisible(v => !v)
+                      setBarsOpen(false)
+                    }}
+                    className="h-4 w-4 rounded border-zinc-300"
+                  />
+                </label>
+                <label className="flex items-center justify-between gap-3 text-sm text-zinc-700">
+                  <span>Progress lines</span>
+                  <input
+                    type="checkbox"
+                    checked={progressLinesVisible}
+                    onChange={() => setProgressVisibleByTab(prev => ({ ...prev, [activeTabId]: !(prev[activeTabId] ?? true) }))}
+                    className="h-4 w-4 rounded border-zinc-300"
+                  />
+                </label>
+                <div className="flex items-center justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setViewOpen(false)}
+                    className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-700 transition hover:bg-zinc-50"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </div>
+        {barsLegendVisible ? (
+          <BarTypesLegend
+            barTypes={barTypes}
+            open={barsOpen}
+            onOpenChange={open => {
+              setBarsOpen(open)
+              if (open) {
+                setStatusesOpen(false)
+                setRangeOpen(false)
+                setViewOpen(false)
+                closeEditor()
+              }
+            }}
+            onUpsert={upsertBarType}
+            onRemove={removeBarType}
+          />
+        ) : null}
         <StatusesLegend
           statuses={statuses}
           open={statusesOpen}
@@ -230,6 +292,7 @@ export default function Home() {
             if (open) {
               setBarsOpen(false)
               setRangeOpen(false)
+              setViewOpen(false)
               closeEditor()
             }
           }}
@@ -496,6 +559,7 @@ export default function Home() {
             barTypes={barTypes}
             statuses={statuses}
             progressLines={progressLines}
+            progressLinesVisible={progressLinesVisible}
             selectedId={selectedId}
             rangeStart={rangeStart}
             rangeEnd={rangeEnd}

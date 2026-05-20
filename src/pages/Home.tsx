@@ -60,6 +60,7 @@ export default function Home() {
   const removeProgressLine = useProgrammeStore(s => s.removeProgressLine)
   const setProgressPoint = useProgrammeStore(s => s.setProgressPoint)
   const restoreInputRef = useRef<HTMLInputElement | null>(null)
+  const tableCaptureRef = useRef<HTMLDivElement | null>(null)
 
   const [sortByTab, setSortByTab] = useState<Record<string, SortState>>({})
   const [filtersByTab, setFiltersByTab] = useState<Record<string, FilterState>>({})
@@ -493,12 +494,14 @@ export default function Home() {
                 const tabName = (activeTab?.name ?? "Table").trim() || "Table"
                 const safe = tabName.replace(/[\\/:*?"<>|]+/g, " ").trim().replace(/\s+/g, "_")
                 const date = new Date().toISOString().slice(0, 10)
+                const element = tableCaptureRef.current
+                if (!element) {
+                  window.alert("Table not ready.")
+                  return
+                }
                 void exportProgrammeViewToPdf({
                   fileName: `${safe || "Table"}_${date}.pdf`,
-                  title: tabName,
-                  items: visibleItems,
-                  barTypes,
-                  statuses,
+                  element,
                 }).catch(() => window.alert("Export failed."))
               }}
               className="inline-flex items-center gap-2 rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-700 transition hover:bg-zinc-50"
@@ -561,6 +564,7 @@ export default function Home() {
             onUpdateProgressLine={updateProgressLine}
             onRemoveProgressLine={removeProgressLine}
             onSetProgressPoint={setProgressPoint}
+            captureRef={tableCaptureRef}
           />
           {items.length === 0 ? (
             <div className="mt-4 rounded-xl border border-zinc-200 bg-white px-4 py-4 text-sm text-zinc-600">

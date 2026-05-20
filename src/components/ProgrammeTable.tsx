@@ -47,6 +47,7 @@ type Props = {
   onUpdateProgressLine: (id: string, patch: Partial<Pick<ProgressLine, "name" | "color" | "weightPx">>) => void
   onRemoveProgressLine: (id: string) => void
   onSetProgressPoint: (lineId: string, itemId: string, patch: Partial<Pick<ProgressPoint, "date" | "yRatio">>) => void
+  captureRef?: React.MutableRefObject<HTMLDivElement | null>
 }
 
 type ColKey = "t1No" | "items" | "srp" | "worksManager" | "designer" | "schedule" | "status" | "actions"
@@ -103,6 +104,7 @@ export default function ProgrammeTable({
   onUpdateProgressLine,
   onRemoveProgressLine,
   onSetProgressPoint,
+  captureRef,
 }: Props) {
   const pxPerDay = 4
   const ns = `drp_${storageNamespace}_`
@@ -956,7 +958,14 @@ export default function ProgrammeTable({
   }
 
   return (
-    <div ref={outerRef} className="w-full rounded-xl border border-zinc-200 bg-white shadow-[0_18px_55px_rgba(0,0,0,.08)]" style={{ borderColor: lineColor }}>
+    <div
+      ref={el => {
+        outerRef.current = el
+        if (captureRef) captureRef.current = el
+      }}
+      className="w-full rounded-xl border border-zinc-200 bg-white shadow-[0_18px_55px_rgba(0,0,0,.08)]"
+      style={{ borderColor: lineColor }}
+    >
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3">
         <div className="min-w-0">
           <div className="text-[11px] uppercase tracking-[0.22em] text-zinc-500">Table</div>
